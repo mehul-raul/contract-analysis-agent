@@ -1,5 +1,4 @@
 # Initial gitignore file 
-cat > .gitignore << 'EOF'
 # Python
 __pycache__/
 *.py[cod]
@@ -12,6 +11,14 @@ venv/
 
 # Environment
 .env
+
+# Model files
+*.h5
+*.pt
+*.pth
+*.joblib
+*.pkl
+
 
 # IDE
 .vscode/
@@ -27,4 +34,4 @@ venv/
 
 # OS
 .DS_Store
-EOF
+
