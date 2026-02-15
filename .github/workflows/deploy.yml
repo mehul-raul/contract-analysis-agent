@@ -45,12 +45,13 @@ jobs:
       - name: Test Docker container
         run: |
           docker run -d -p 8000:8000 \
-            -e DATABASE_URL=postgresql://test:test@localhost/test \
-            -e GOOGLE_API_KEY=test \
-            -e TAVILY_API_KEY=test \
-            -e SECRET_KEY=test-secret \
-            --name test-container \
-            contract-analysis-api:${{ github.sha }}
+          -e CI=true \
+          -e DATABASE_URL=postgresql://test:test@localhost/test \
+          -e GOOGLE_API_KEY=test \
+          -e TAVILY_API_KEY=test \
+          -e SECRET_KEY=test-secret \
+          --name test-container \
+          contract-analysis-api:${{ github.sha }}
           
           sleep 10
           

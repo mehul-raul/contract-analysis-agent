@@ -9,7 +9,7 @@ from app.api.auth_routes import router as auth_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if not os.getenv("CI"):
+    if os.getenv("CI") != "true":
         init_db()
     yield
 
