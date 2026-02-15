@@ -21,6 +21,15 @@ jobs:
         with:
           python-version: '3.10'
       
+      # CACHE PIP DEPENDENCIES (NEW)
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      
       # Install dependencies and test
       - name: Install dependencies
         run: |
@@ -36,22 +45,47 @@ jobs:
         run: |
           python -c "from app.main import app; print('✅ App imports successfully')"
       
-      # Build Docker image
+      # SETUP DOCKER BUILDX (NEW)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      # CACHE DOCKER LAYERS (NEW)
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+      
+      # Build Docker image (UPDATED)
       - name: Build Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: false
+          load: true
+          tags: contract-analysis-api:${{ github.sha }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+      
+      # MOVE CACHE (NEW)
+      - name: Move cache
         run: |
-          docker build -t contract-analysis-api:${{ github.sha }} .
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
       
       # Test Docker container
       - name: Test Docker container
         run: |
           docker run -d -p 8000:8000 \
-          -e CI=true \
-          -e DATABASE_URL=postgresql://test:test@localhost/test \
-          -e GOOGLE_API_KEY=test \
-          -e TAVILY_API_KEY=test \
-          -e SECRET_KEY=test-secret \
-          --name test-container \
-          contract-analysis-api:${{ github.sha }}
+            -e CI=true \
+            -e DATABASE_URL=postgresql://test:test@localhost/test \
+            -e GOOGLE_API_KEY=test \
+            -e TAVILY_API_KEY=test \
+            -e SECRET_KEY=test-secret \
+            --name test-container \
+            contract-analysis-api:${{ github.sha }}
           
           sleep 10
           
