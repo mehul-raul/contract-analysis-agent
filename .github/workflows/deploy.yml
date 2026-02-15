@@ -28,6 +28,11 @@ jobs:
           pip install -r requirements.txt
       
       - name: Test app imports
+        env:
+          DATABASE_URL: postgresql://test:test@localhost/test
+          GOOGLE_API_KEY: test-key
+          TAVILY_API_KEY: test-key
+          SECRET_KEY: test-secret
         run: |
           python -c "from app.main import app; print('✅ App imports successfully')"
       
