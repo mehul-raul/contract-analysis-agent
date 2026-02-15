@@ -1,13 +1,22 @@
 from fastapi import FastAPI
+from app.database import init_db
+from contextlib import asynccontextmanager
 from app.api.routes import router
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.auth_routes import router as auth_router
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
 app = FastAPI(
     title="Legal Document Analysis API",
     description="""API for analyzing legal contracts, agreements, business documents, research papers, and similar formal documents using LLMs and vector search.""",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
+
 
 # ADD CORS MIDDLEWARE
 app.add_middleware(
