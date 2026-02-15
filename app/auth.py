@@ -6,6 +6,7 @@ from fastapi import Depends, HTTPException, status  # ADD THIS
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials  # ADD THIS
 from sqlalchemy.orm import Session 
 from app.database import get_db, Contract, ContractChunk, User
+from app.config import settings
 
 # Add this at the top with other imports
 security = HTTPBearer()
@@ -14,7 +15,7 @@ security = HTTPBearer()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT settings
-SECRET_KEY = "your-secret-key-change-this-in-production"  # We'll move to .env later
+SECRET_KEY = settings.SECRET_KEY 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 

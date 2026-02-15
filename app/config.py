@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     GOOGLE_API_KEY : str
     TAVILY_API_KEY : str
+    SECRET_KEY: str = "dev-secret-key-change-in-production"
 
     model_config = SettingsConfigDict(env_file=".env")
 
