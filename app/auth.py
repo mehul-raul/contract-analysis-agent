@@ -1,102 +1,142 @@
-from passlib.context import CryptContext
-from jose import JWTError, jwt
+import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from fastapi import Depends, HTTPException, status  # ADD THIS
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials  # ADD THIS
-from sqlalchemy.orm import Session 
-from app.database import get_db, Contract, ContractChunk, User
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from sqlalchemy.orm import Session
+
+from app.database import get_db, User
 from app.config import settings
 
-# Add this at the top with other imports
+
+# ==============================
+# Security Setup
+# ==============================
+
 security = HTTPBearer()
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto"
+)
 
-# JWT settings
-SECRET_KEY = settings.SECRET_KEY 
+SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 
+# ==============================
+# Password Hashing
+# ==============================
+
+def _normalize_password(password: str) -> str:
+    """
+    Pre-hash password with SHA256 to avoid bcrypt 72-byte limit.
+    Returns fixed-length hex string.
+    """
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+
 def hash_password(password: str) -> str:
     """
-    Convert plain password to hashed password
-    
-    Example:
-        "mypassword123" → "$2b$12$KIX..."
+    Convert plain password to secure hashed password.
     """
-    return pwd_context.hash(password)
+    normalized = _normalize_password(password)
+    return pwd_context.hash(normalized)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
-    Check if password is correct
-    
-    Example:
-        verify_password("mypassword123", "$2b$12$KIX...") → True
-        verify_password("wrongpass", "$2b$12$KIX...") → False
+    Verify user password.
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    normalized = _normalize_password(plain_password)
+    return pwd_context.verify(normalized, hashed_password)
 
+
+# ==============================
+# JWT Token Handling
+# ==============================
 
 def create_access_token(data: dict) -> str:
     """
-    Create JWT token
-    
-    Example:
-        create_access_token({"user_id": 1})
-        → "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    Create JWT access token.
     """
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+    to_encode.update({
+        "exp": expire,
+        "iat": datetime.now(timezone.utc),
+        "type": "access"
+    })
+
+    encoded_jwt = jwt.encode(
+        to_encode,
+        SECRET_KEY,
+        algorithm=ALGORITHM
+    )
+
     return encoded_jwt
 
 
 def verify_token(token: str) -> Optional[dict]:
     """
-    Verify JWT token and extract data
-    
-    Example:
-        verify_token("eyJhbGci...") → {"user_id": 1}
-        verify_token("invalid") → None
+    Decode and validate JWT token.
     """
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
+
+        if payload.get("type") != "access":
+            return None
+
         return payload
+
     except JWTError:
         return None
-    
+
+
+# ==============================
+# FastAPI Dependency
+# ==============================
+
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-) -> int:
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+) -> User:
     """
-    Verify JWT token and return user_id
-    
-    Returns:
-        user_id (int)
+    Validate JWT and return current user object.
     """
-    
+
     token = credentials.credentials
-    
-    # Verify token
     payload = verify_token(token)
+
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token"
         )
-    
-    # Get user_id from token
+
     user_id = payload.get("user_id")
+
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload"
         )
-    
-    return user_id 
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+
+    return user
