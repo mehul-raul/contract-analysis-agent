@@ -37,11 +37,11 @@ class ContractChunk(Base):
     chunk_index = Column(Integer, nullable=False)
     embedding = Column(Vector(3072))  # COZ 3072-dim embeddings from GEMINI model
 
-    __table_args__ = (
+    __table_args__ = (      #__table_args__ is where you define:Indexes,Constraints
         Index(
             'idx_chunk_fts',
-            text("to_tsvector('english', chunk_text)"),
-            postgresql_using='gin'
+            text("to_tsvector('english', chunk_text)"), #to_tsvector Converts text into searchable tokens
+            postgresql_using='gin'  # gin is Special index optimized for text search
         ),
     )
 

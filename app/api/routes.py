@@ -6,8 +6,10 @@ from app.embeddingmaker import generate_many_embeddings, generate_embedding
 from sqlalchemy import text
 from pydantic import BaseModel, Field
 from typing import Annotated
-from app.auth import get_current_user 
-from app.hybrid_search import hybrid_search, rerank_chunks
+from app.auth import get_current_user
+from app.llm import create_contract_agent, run_agent
+
+
 
 router = APIRouter()
 
@@ -76,20 +78,22 @@ def upload_contract(
     
 class QueryRequest(BaseModel):
     contract_id: Annotated[int, Field(..., description="ID of the contract to query")]
-    question: Annotated[str, Field(..., description="The question to ask about the contract")]
-    top_k: Annotated[int, Field(5, description="Number of top similar chunks to retrieve")] = 5
+    question: Annotated[str, Field(..., description="The question to ask")]
+    top_k: Annotated[int, Field(5, description="Number of results")] = 5
 
-@router.post("/query")
+
+@router.post("/query")  # Changed from /agent-query
 def query_contract(
     request: QueryRequest,
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user)
 ):
     """
-    Search contract using HYBRID search + RERANKING
+    Query contract using intelligent agent.
+    Agent decides whether to search contract, web, or both.
     """
     
-    # Step 0: Verify ownership
+    # Verify ownership
     contract = db.query(Contract).filter(
         Contract.id == request.contract_id,
         Contract.user_id == user_id
@@ -101,46 +105,120 @@ def query_contract(
             detail="Contract not found or you don't have access to it"
         )
     
-    # Step 1: Hybrid search (get 10 candidates)
-    print(f"🔍 User {user_id} searching contract {request.contract_id}: {request.question}")
+    print(f"🤖 Agent query from user {user_id}: {request.question}")
     
-    candidates = hybrid_search(
-        db=db,
-        query=request.question,
-        contract_id=request.contract_id,
-        top_k=10  # Get 10 candidates for reranking
-    )
-    
-    if not candidates:
-        raise HTTPException(status_code=404, detail="No relevant chunks found")
-    
-    # Step 2: Rerank to get best 3
-    reranked_chunks = rerank_chunks(
-        query=request.question,
-        chunks=candidates,
-        top_k=request.top_k  # Usually 3
-    )
-    
-    # Step 3: Format for LLM
-    formatted_chunks = [
-        {
-            "chunk_index": chunk["chunk_index"],
-            "text": chunk["text"],
-            "hybrid_score": chunk["hybrid_score"],
-            "rerank_score": chunk["rerank_score"]  # Show both scores
+    try:
+        # Create agent with tools
+        agent = create_contract_agent(db, request.contract_id)
+        
+        # Run agent (it decides which tools to use)
+        answer = run_agent(agent, request.question)
+        
+        return {
+            "question": request.question,
+            "contract_id": request.contract_id,
+            "answer": answer,
+            "search_method": "agentic (hybrid + rerank + web)"
         }
-        for chunk in reranked_chunks
-    ]
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
     
-    # Step 4: Generate answer with LLM
-    print("🤖 Generating answer...")
-    from app.llm import generate_answer
-    answer = generate_answer(request.question, formatted_chunks)
+
+
+@router.get("/my-contracts")
+def list_my_contracts(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user)
+):
+    """
+    List all contracts uploaded by current user
+    """
+    contracts = db.query(Contract).filter(
+        Contract.user_id == user_id
+    ).all()
     
     return {
-        "question": request.question,
-        "contract_id": request.contract_id,
-        "answer": answer,
-        "sources": formatted_chunks,
-        "search_type": "hybrid + reranking"  # Updated
+        "total": len(contracts),
+        "contracts": [
+            {
+                "id": c.id,
+                "filename": c.filename,
+                "upload_date": c.upload_date.isoformat(),
+                "num_chunks": c.num_chunks
+            }
+            for c in contracts
+        ]
+    }
+
+
+@router.delete("/contracts/{contract_id}")
+def delete_contract(
+    contract_id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user)
+):
+    """
+    Delete a specific contract (only if you own it)
+    """
+    
+    # Verify ownership
+    contract = db.query(Contract).filter(
+        Contract.id == contract_id,
+        Contract.user_id == user_id
+    ).first()
+    
+    if not contract:
+        raise HTTPException(
+            status_code=404,
+            detail="Contract not found or you don't own it"
+        )
+    
+    # Delete chunks first (foreign key constraint)
+    db.query(ContractChunk).filter(
+        ContractChunk.contract_id == contract_id
+    ).delete()
+    
+    # Delete contract
+    db.delete(contract)
+    db.commit()
+    
+    return {
+        "message": f"Contract '{contract.filename}' deleted successfully",
+        "contract_id": contract_id
+    }
+
+
+@router.delete("/my-contracts/all")
+def delete_all_my_contracts(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user)
+):
+    """
+    Delete ALL contracts uploaded by current user
+    """
+    
+    # Get user's contracts
+    user_contracts = db.query(Contract).filter(
+        Contract.user_id == user_id
+    ).all()
+    
+    if not user_contracts:
+        return {"message": "No contracts to delete"}
+    
+    # Delete all chunks for user's contracts
+    for contract in user_contracts:
+        db.query(ContractChunk).filter(
+            ContractChunk.contract_id == contract.id
+        ).delete()
+    
+    # Delete all contracts
+    count = db.query(Contract).filter(
+        Contract.user_id == user_id
+    ).delete()
+    
+    db.commit()
+    
+    return {
+        "message": f"Deleted {count} contracts successfully"
     }

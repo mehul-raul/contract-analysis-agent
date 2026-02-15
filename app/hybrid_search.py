@@ -5,12 +5,7 @@ from app.embeddingmaker import generate_embedding
 from sentence_transformers import CrossEncoder
 
 
-def hybrid_search(
-    db: Session,
-    query: str,
-    contract_id: int,
-    top_k: int = 10
-) -> List[Dict]:
+def hybrid_search(db: Session,query: str,contract_id: int,top_k: int = 10) -> List[Dict]:
     """
     Hybrid search: Combine vector search + keyword search
     
@@ -61,10 +56,10 @@ def hybrid_search(
             ) AS rank
         FROM contract_chunks
         WHERE contract_id = :contract_id
-          AND to_tsvector('english', chunk_text) @@ plainto_tsquery('english', :query)
+          AND to_tsvector('english', chunk_text) @@ plainto_tsquery('english', :query) 
         ORDER BY rank DESC
         LIMIT :limit
-    """)
+    """) #@@ means Does left match right?
     
     keyword_results = db.execute(
         keyword_sql,
@@ -170,19 +165,22 @@ def rerank_chunks(query: str, chunks: List[Dict], top_k: int = 5) -> List[Dict]:
     
     reranker = get_reranker()
     
-    # Create pairs (query, chunk_text)
+   
     pairs = [(query, chunk['text']) for chunk in chunks]
+    #above is same as pairs = []
+    # for chunk in chunks:
+    # pairs.append((query, chunk['text']))
     
-    # Get reranking scores
+    # Get reranking scores comapi to query
     scores = reranker.predict(pairs)
     
     # Add rerank scores to chunks
     for chunk, score in zip(chunks, scores):
-        chunk['rerank_score'] = float(score)
+        chunk['rerank_score'] = float(score) #here we make a rerank key in dict and assign the score to it
     
     # Sort by rerank score (higher = better)
     reranked = sorted(chunks, key=lambda x: x['rerank_score'], reverse=True)
     
     print(f"✅ Reranked, returning top {top_k}")
     
-    return reranked[:top_k]
+    return reranked[:top_k] #slicing done for top k out of 10
