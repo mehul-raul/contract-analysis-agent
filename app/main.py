@@ -21,12 +21,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize database on startup (if not in CI)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
-    yield
+    # Startup logic
+    print("🔧 Initializing database...")
+    try:
+        init_db()
+        print("✅ Database tables ready!")
+    except Exception as e:
+        print(f"⚠️ Database init error: {e}")
     
+    yield
+
 # Routes
 app.include_router(router)
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
