@@ -109,7 +109,7 @@ def verify_token(token: str) -> Optional[dict]:
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
-) -> User:
+) -> int:
     """
     Validate JWT and return current user object.
     """
@@ -139,4 +139,4 @@ def get_current_user(
             detail="User not found"
         )
 
-    return user
+    return user.id
