@@ -136,22 +136,23 @@ def query_contract(
     user_id: int = Depends(get_current_user)
 ):
     """
-    Query contract using intelligent agent with conversation context.
+    Smart conversational AI that works with or without documents.
+    
+    Features:
+    - Chat naturally (general conversation)
+    - Search across ALL user documents intelligently
+    - Search the web for general knowledge
+    - Combine multiple sources
+    - Works even with 0 documents uploaded!
+    
+    No contract_id needed - agent is smart enough to decide what to do!
     """
     
-    # Verify ownership
-    contract = db.query(Contract).filter(
-        Contract.id == request.contract_id,
-        Contract.user_id == user_id
-    ).first()
+    print(f"🤖 Query from user {user_id}: {request.question}")
     
-    if not contract:
-        raise HTTPException(
-            status_code=404,
-            detail="Contract not found or you don't have access to it"
-        )
-    
-    print(f"🤖 Agent query from user {user_id}: {request.question}")
+    # Check how many documents user has
+    doc_count = db.query(Contract).filter(Contract.user_id == user_id).count()
+    print(f"📚 User has {doc_count} document(s)")
     
     try:
         # Get or create conversation
@@ -161,26 +162,32 @@ def query_contract(
                 Conversation.user_id == user_id
             ).first()
             if not conversation:
-                raise HTTPException(status_code=404, detail="Conversation not found")
+                conversation = Conversation(user_id=user_id)
+                db.add(conversation)
+                db.commit()
+                db.refresh(conversation)
         else:
-            # Create new conversation
-            conversation = Conversation(
-                user_id=user_id,
-                contract_id=request.contract_id
-            )
+            conversation = Conversation(user_id=user_id)
             db.add(conversation)
             db.commit()
             db.refresh(conversation)
         
-        # Create agent with tools
-        agent = create_contract_agent(db, request.contract_id)
+        # Create SMART agent (works with or without documents!)
+        from app.llm import create_smart_agent, run_smart_agent
         
-        # Convert conversation_history to dict format
+        print("🧠 Creating smart agent...")
+        agent = create_smart_agent(db, user_id)
+        
+        # Convert conversation history to proper format
         history = [{"role": msg.role, "content": msg.content} 
                    for msg in request.conversation_history]
         
-        # Run agent with conversation context
-        answer = run_agent(agent, request.question, conversation_history=history)
+        print(f"💬 Running agent with {len(history)} previous messages...")
+        
+        # Run smart agent
+        answer = run_smart_agent(agent, request.question, conversation_history=history)
+        
+        print(f"✅ Got answer: {answer[:100]}...")
         
         # Save user message
         user_message = Message(
@@ -205,15 +212,18 @@ def query_contract(
         
         return {
             "question": request.question,
-            "contract_id": request.contract_id,
             "answer": answer,
             "conversation_id": conversation.id,
-            "search_method": "agentic (hybrid + rerank + web)"
+            "documents_available": doc_count,
+            "search_method": "smart_conversational_ai"
         }
         
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+        print(f"❌ Error in query endpoint: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 
 @router.get("/my-contracts")

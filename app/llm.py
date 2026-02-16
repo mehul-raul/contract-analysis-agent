@@ -1,6 +1,7 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.agents import create_agent
+from langchain_core.messages import SystemMessage
 from sqlalchemy.orm import Session
 
 _llm = None
@@ -12,28 +13,34 @@ def get_llm():
     if _llm is None:
         print("🤖 Loading Gemini LLM...")
         _llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
+            model="gemini-2.0-flash-exp",
             temperature=0.3
         )
         print("✅ LLM loaded")
     return _llm
 
 
-def create_contract_agent(db: Session, contract_id: int):
+def create_smart_agent(db: Session, user_id: int):
     """
-    Create agent with contract search and web search tools
+    Create intelligent conversational agent using NEW LangChain API.
+    
+    Can:
+    - Chat naturally without documents
+    - Search user's documents when relevant
+    - Search the web for general knowledge
+    - Combine multiple sources intelligently
     """
-    from app.tools import create_web_search_tool, create_contract_search_tool
+    from app.tools import create_web_search_tool, create_multi_document_search_tool
     
     llm = get_llm()
     
     # Create tools
     tools = [
-        create_contract_search_tool(db, contract_id),
+        create_multi_document_search_tool(db, user_id),
         create_web_search_tool()
     ]
     
-    # System prompt using ChatPromptTemplate style
+    # System prompt for smart behavior
     system_prompt = """
     You are a specialized legal and business document analysis assistant.
 
@@ -181,30 +188,32 @@ def create_contract_agent(db: Session, contract_id: int):
     Your goal is not just to search — 
     your goal is to make the user genuinely understand their document.
     """
-    # Create agent with system prompt
+
+    # Create agent with new API
     agent = create_agent(llm, tools, system_prompt=system_prompt)
     
     return agent
 
 
-def run_agent(agent, question: str, conversation_history: list = None) -> str:
+def run_smart_agent(agent, question: str, conversation_history: list = None) -> str:
     """
-    Execute agent with conversation context
+    Execute smart agent with conversation context using NEW API
     
     Args:
-        agent: LangChain agent
-        question: User's current question
-        conversation_history: Previous messages [{"role": "user", "content": "..."}, ...]
+        agent: LangChain agent (from create_agent)
+        question: Current question
+        conversation_history: List of previous messages [{"role": "user", "content": "..."}, ...]
         
     Returns:
         Final answer as string
     """
-    # Build messages with history
+    
+    # Build messages list
     messages = []
     
-    # Add conversation history if provided
+    # Add conversation history if provided (last 20 messages - your preference)
     if conversation_history:
-        for msg in conversation_history[-20:]:  # Last 20 messages only
+        for msg in conversation_history[-20:]:  # Keep your 20 message limit
             messages.append({
                 "role": msg["role"],
                 "content": msg["content"]
@@ -216,12 +225,33 @@ def run_agent(agent, question: str, conversation_history: list = None) -> str:
         "content": question
     })
     
-    final_answer = ""
-    
-    for step in agent.stream(
-        {"messages": messages},
-        stream_mode="values"
-    ):
-        final_answer = step["messages"][-1].content
-    
-    return final_answer
+    try:
+        final_answer = ""
+        
+        # Stream agent responses
+        for step in agent.stream(
+            {"messages": messages},
+            stream_mode="values"
+        ):
+            # Safely extract content
+            last_message = step["messages"][-1]
+            
+            if hasattr(last_message, 'content'):
+                final_answer = last_message.content
+            else:
+                final_answer = str(last_message)
+        
+        return final_answer
+        
+    except Exception as e:
+        # Better error handling
+        print(f"❌ Agent error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return f"I encountered an error while processing your question. Please try rephrasing or try again. Error: {str(e)}"
+
+
+# Keep legacy function for backwards compatibility
+def run_agent(agent, question: str, conversation_history: list = None) -> str:
+    """Legacy wrapper - calls run_smart_agent"""
+    return run_smart_agent(agent, question, conversation_history)
