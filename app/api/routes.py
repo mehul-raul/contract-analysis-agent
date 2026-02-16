@@ -7,7 +7,7 @@ from sqlalchemy import text
 from pydantic import BaseModel, Field
 from typing import Annotated, Optional, List
 from app.auth import get_current_user
-from app.llm import create_contract_agent, run_agent
+from app.llm import create_smart_agent, run_smart_agent
 from datetime import datetime, timezone
 
 
@@ -172,8 +172,7 @@ def query_contract(
             db.commit()
             db.refresh(conversation)
         
-        # Create SMART agent (works with or without documents!)
-        from app.llm import create_smart_agent, run_smart_agent
+        
         
         print("🧠 Creating smart agent...")
         agent = create_smart_agent(db, user_id)
