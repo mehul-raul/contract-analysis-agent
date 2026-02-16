@@ -1,14 +1,14 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.database import get_db, Contract, ContractChunk, User
+from app.database import get_db, Contract, ContractChunk, User, Conversation, Message
 from app.pdf_read_chunk import extract_text_from_pdf, chunk_text
 from app.embeddingmaker import generate_many_embeddings, generate_embedding
 from sqlalchemy import text
 from pydantic import BaseModel, Field
-from typing import Annotated
+from typing import Annotated, Optional, List
 from app.auth import get_current_user
 from app.llm import create_contract_agent, run_agent
-
+from datetime import datetime, timezone
 
 
 router = APIRouter()
@@ -76,21 +76,67 @@ def upload_contract(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
+class ConversationMessage(BaseModel):
+    role: str  # 'user' or 'assistant'
+    content: str
+    
 class QueryRequest(BaseModel):
     contract_id: Annotated[int, Field(..., description="ID of the contract to query")]
     question: Annotated[str, Field(..., description="The question to ask")]
     top_k: Annotated[int, Field(5, description="Number of results")] = 5
+    conversation_history: Optional[List[ConversationMessage]] = []
+    conversation_id: Optional[int] = None
 
 
-@router.post("/query")  # Changed from /agent-query
+# @router.post("/query")  # Changed from /agent-query
+# def query_contract(
+#     request: QueryRequest,
+#     db: Session = Depends(get_db),
+#     user_id: int = Depends(get_current_user)
+# ):
+#     """
+#     Query contract using intelligent agent.
+#     Agent decides whether to search contract, web, or both.
+#     """
+    
+#     # Verify ownership
+#     contract = db.query(Contract).filter(
+#         Contract.id == request.contract_id,
+#         Contract.user_id == user_id
+#     ).first()
+    
+#     if not contract:
+#         raise HTTPException(
+#             status_code=404,
+#             detail="Contract not found or you don't have access to it"
+#         )
+    
+#     print(f"🤖 Agent query from user {user_id}: {request.question}")
+    
+#     try:
+#         # Create agent with tools
+#         agent = create_contract_agent(db, request.contract_id)
+        
+#         # Run agent (it decides which tools to use)
+#         answer = run_agent(agent, request.question)
+        
+#         return {
+#             "question": request.question,
+#             "contract_id": request.contract_id,
+#             "answer": answer,
+#             "search_method": "agentic (hybrid + rerank + web)"
+#         }
+        
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+@router.post("/query")
 def query_contract(
     request: QueryRequest,
     db: Session = Depends(get_db),
     user_id: int = Depends(get_current_user)
 ):
     """
-    Query contract using intelligent agent.
-    Agent decides whether to search contract, web, or both.
+    Query contract using intelligent agent with conversation context.
     """
     
     # Verify ownership
@@ -108,22 +154,66 @@ def query_contract(
     print(f"🤖 Agent query from user {user_id}: {request.question}")
     
     try:
+        # Get or create conversation
+        if request.conversation_id:
+            conversation = db.query(Conversation).filter(
+                Conversation.id == request.conversation_id,
+                Conversation.user_id == user_id
+            ).first()
+            if not conversation:
+                raise HTTPException(status_code=404, detail="Conversation not found")
+        else:
+            # Create new conversation
+            conversation = Conversation(
+                user_id=user_id,
+                contract_id=request.contract_id
+            )
+            db.add(conversation)
+            db.commit()
+            db.refresh(conversation)
+        
         # Create agent with tools
         agent = create_contract_agent(db, request.contract_id)
         
-        # Run agent (it decides which tools to use)
-        answer = run_agent(agent, request.question)
+        # Convert conversation_history to dict format
+        history = [{"role": msg.role, "content": msg.content} 
+                   for msg in request.conversation_history]
+        
+        # Run agent with conversation context
+        answer = run_agent(agent, request.question, conversation_history=history)
+        
+        # Save user message
+        user_message = Message(
+            conversation_id=conversation.id,
+            role="user",
+            content=request.question
+        )
+        db.add(user_message)
+        
+        # Save assistant response
+        assistant_message = Message(
+            conversation_id=conversation.id,
+            role="assistant",
+            content=answer
+        )
+        db.add(assistant_message)
+        
+        # Update conversation timestamp
+        conversation.updated_at = datetime.now(timezone.utc)
+        
+        db.commit()
         
         return {
             "question": request.question,
             "contract_id": request.contract_id,
             "answer": answer,
+            "conversation_id": conversation.id,
             "search_method": "agentic (hybrid + rerank + web)"
         }
         
     except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
-    
 
 
 @router.get("/my-contracts")

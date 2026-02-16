@@ -187,24 +187,41 @@ def create_contract_agent(db: Session, contract_id: int):
     return agent
 
 
-def run_agent(agent, question: str) -> str:
+def run_agent(agent, question: str, conversation_history: list = None) -> str:
     """
-    Execute agent and return final answer
+    Execute agent with conversation context
     
     Args:
         agent: LangChain agent
-        question: User's question
+        question: User's current question
+        conversation_history: Previous messages [{"role": "user", "content": "..."}, ...]
         
     Returns:
         Final answer as string
     """
+    # Build messages with history
+    messages = []
+    
+    # Add conversation history if provided
+    if conversation_history:
+        for msg in conversation_history[-20:]:  # Last 20 messages only
+            messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
+    
+    # Add current question
+    messages.append({
+        "role": "user",
+        "content": question
+    })
+    
     final_answer = ""
     
     for step in agent.stream(
-        {"messages": question},
+        {"messages": messages},
         stream_mode="values"
     ):
-        # Get the last message (final answer)
         final_answer = step["messages"][-1].content
     
     return final_answer
