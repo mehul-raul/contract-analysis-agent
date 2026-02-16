@@ -6,21 +6,6 @@ from app.database import init_db
 import os
 from contextlib import asynccontextmanager
 
-app = FastAPI(
-    title="Legal Document Analysis API",
-    description="API for analyzing legal contracts, agreements, and research papers using LLMs.",
-    version="1.0.0"
-)
-
-# CORS - MUST be added FIRST before any routes
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup logic
@@ -32,6 +17,25 @@ async def lifespan(app: FastAPI):
         print(f"⚠️ Database init error: {e}")
     
     yield
+    # Shutdown logic (if needed)
+    print("👋 Shutting down...")
+
+# Attach the lifespan to the app
+app = FastAPI(
+    title="Legal Document Analysis API",
+    description="API for analyzing legal contracts, agreements, and research papers using LLMs.",
+    version="1.0.0",
+    lifespan=lifespan  # Add this line
+)
+
+# CORS - MUST be added FIRST before any routes
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Routes
 app.include_router(router)
