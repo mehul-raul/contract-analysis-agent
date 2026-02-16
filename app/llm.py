@@ -13,7 +13,7 @@ def get_llm():
     if _llm is None:
         print("🤖 Loading Gemini LLM...")
         _llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash-exp",
+            model="gemini-2.5-flash",
             temperature=0.3
         )
         print("✅ LLM loaded")
