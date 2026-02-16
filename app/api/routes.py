@@ -183,7 +183,22 @@ def query_contract(
         # Run smart agent
         answer = run_smart_agent(agent, request.question, conversation_history=history)
         
-        print(f"✅ Got answer: {answer[:100]}...")
+        # Extract just the text from the answer (handle different response formats)
+        if isinstance(answer, list) and len(answer) > 0:
+            # If it's a list of message parts, extract the text
+            text_parts = []
+            for part in answer:
+                if isinstance(part, dict) and part.get('type') == 'text':
+                    text_parts.append(part.get('text', ''))
+            answer_text = ' '.join(text_parts)
+        elif isinstance(answer, dict) and 'text' in answer:
+            # If it's a dict with text field
+            answer_text = answer['text']
+        else:
+            # If it's already a string
+            answer_text = str(answer)
+        
+        print(f"✅ Got answer: {answer_text[:100]}...")
         
         # Save user message
         user_message = Message(
@@ -193,11 +208,11 @@ def query_contract(
         )
         db.add(user_message)
         
-        # Save assistant response
+        # Save assistant response with extracted text
         assistant_message = Message(
             conversation_id=conversation.id,
             role="assistant",
-            content=answer
+            content=answer_text  # ← Now it's a string
         )
         db.add(assistant_message)
         
@@ -208,9 +223,9 @@ def query_contract(
         
         return {
             "question": request.question,
-            "answer": answer,
+            "answer": answer_text,  # ← Return the extracted text
             "conversation_id": conversation.id,
-            "contract_id": request.contract_id,  # ✅ Add this
+            "contract_id": request.contract_id,
             "documents_available": doc_count,
             "search_method": "smart_conversational_ai"
         }
