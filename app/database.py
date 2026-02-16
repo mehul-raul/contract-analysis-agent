@@ -35,13 +35,13 @@ class ContractChunk(Base):
     contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=False)
     chunk_text = Column(Text, nullable=False)
     chunk_index = Column(Integer, nullable=False)
-    embedding = Column(Vector(3072))  # COZ 3072-dim embeddings from GEMINI model
+    embedding = Column(Vector(3072))
 
-    __table_args__ = (      #__table_args__ is where you define:Indexes,Constraints
+    __table_args__ = (
         Index(
             'idx_chunk_fts',
-            text("to_tsvector('english', chunk_text)"), #to_tsvector Converts text into searchable tokens
-            postgresql_using='gin'  # gin is Special index optimized for text search
+            text("to_tsvector('english', chunk_text)"),
+            postgresql_using='gin'
         ),
     )
 
@@ -50,9 +50,9 @@ class Conversation(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=False)
+    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True)  # ✅ NULLABLE for general chat
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 class Message(Base):
     __tablename__ = "messages"

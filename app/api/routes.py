@@ -137,15 +137,6 @@ def query_contract(
 ):
     """
     Smart conversational AI that works with or without documents.
-    
-    Features:
-    - Chat naturally (general conversation)
-    - Search across ALL user documents intelligently
-    - Search the web for general knowledge
-    - Combine multiple sources
-    - Works even with 0 documents uploaded!
-    
-    No contract_id needed - agent is smart enough to decide what to do!
     """
     
     print(f"🤖 Query from user {user_id}: {request.question}")
@@ -162,17 +153,23 @@ def query_contract(
                 Conversation.user_id == user_id
             ).first()
             if not conversation:
-                conversation = Conversation(user_id=user_id)
+                # Create new conversation
+                conversation = Conversation(
+                    user_id=user_id,
+                    contract_id=request.contract_id  # ✅ Can be None
+                )
                 db.add(conversation)
                 db.commit()
                 db.refresh(conversation)
         else:
-            conversation = Conversation(user_id=user_id)
+            # Create new conversation
+            conversation = Conversation(
+                user_id=user_id,
+                contract_id=request.contract_id  # ✅ Can be None
+            )
             db.add(conversation)
             db.commit()
             db.refresh(conversation)
-        
-        
         
         print("🧠 Creating smart agent...")
         agent = create_smart_agent(db, user_id)
@@ -213,6 +210,7 @@ def query_contract(
             "question": request.question,
             "answer": answer,
             "conversation_id": conversation.id,
+            "contract_id": request.contract_id,  # ✅ Add this
             "documents_available": doc_count,
             "search_method": "smart_conversational_ai"
         }

@@ -2,6 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
 from app.api.auth_routes import router as auth_router
+from app.database import init_db
+import os
+from contextlib import asynccontextmanager
 
 app = FastAPI(
     title="Legal Document Analysis API",
@@ -18,6 +21,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Initialize database on startup (if not in CI)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+    
 # Routes
 app.include_router(router)
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
