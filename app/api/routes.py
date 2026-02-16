@@ -81,7 +81,7 @@ class ConversationMessage(BaseModel):
     content: str
     
 class QueryRequest(BaseModel):
-    contract_id: Annotated[int, Field(..., description="ID of the contract to query")]
+    contract_id: Annotated[Optional[int], Field(default=None, description="ID of the contract to query")]
     question: Annotated[str, Field(..., description="The question to ask")]
     top_k: Annotated[int, Field(5, description="Number of results")] = 5
     conversation_history: Optional[List[ConversationMessage]] = []
