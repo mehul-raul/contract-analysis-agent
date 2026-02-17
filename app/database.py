@@ -35,7 +35,7 @@ class ContractChunk(Base):
     contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=False)
     chunk_text = Column(Text, nullable=False)
     chunk_index = Column(Integer, nullable=False)
-    embedding = Column(Vector(3072))
+    embedding = Column(Vector(384), nullable=False)  # Assuming 384-dim embeddings from MiniLM
 
     __table_args__ = (
         Index(
