@@ -42,6 +42,7 @@ jobs:
           GOOGLE_API_KEY: test-key
           TAVILY_API_KEY: test-key
           SECRET_KEY: test-secret
+          COHERE_API_KEY: test-key
         run: |
           python -c "from app.main import app; print('✅ App imports successfully')"
       
@@ -84,6 +85,7 @@ jobs:
             -e GOOGLE_API_KEY=test \
             -e TAVILY_API_KEY=test \
             -e SECRET_KEY=test-secret \
+            -e COHERE_API_KEY=test \
             --name test-container \
             contract-analysis-api:${{ github.sha }}
           
