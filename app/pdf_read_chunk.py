@@ -14,7 +14,7 @@ def extract_text_from_pdf(pdf_file) -> str:
     except Exception as e:
         raise Exception(f"Failed to extract PDF: {str(e)}")
     
-def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50) -> List[str]:
+def chunk_text(text: str, chunk_size: int = 350, overlap: int = 50) -> List[str]:
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=overlap)
     chunks = text_splitter.split_text(text)
     return chunks
